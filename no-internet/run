@@ -1,0 +1,5 @@
+#!/bin/bash
+sudo addgroup no-internet
+sudo usermod -a -G no-internet $USER
+
+sudo cp -prf ni /usr/local/bin/ni
