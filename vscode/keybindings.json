@@ -1,0 +1,12 @@
+// Keyboard shortcuts
+// Inc/Decrease split window
+[
+	{
+		"key": "shift+right",
+		"command": "workbench.action.decreaseViewSize"
+	},
+	{
+		"key": "shift+left",
+		"command": "workbench.action.increaseViewSize"
+	}
+]
