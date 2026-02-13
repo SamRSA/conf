@@ -1,32 +1,56 @@
 {
-"vim.easymotion": true,
-"vim.sneak": true,
-"vim.incsearch": true,
-"vim.useSystemClipboard": true,
-"vim.useCtrlKeys": true,
-"vim.hlsearch": true,
-"vim.normalModeKeyBindingsNonRecursive": [
-	{
-	"before": ["<leader>", "d"],
-	"after": ["d", "d"]
-	}
-],
-"vim.leader": "<space>",
-"vim.handleKeys": {
-	"<C-a>": false,
-	"<C-f>": false,
-	"<C-w>": false,
-	"<C-n>": false
-},
-// $ command takes newline
-"vim.visualModeKeyBindingsNonRecursive": [
-    {
-        "before": ["$"],
-        "after": ["g", "_"]
+    "telemetry.editStats.enabled": false,
+    "telemetry.feedback.enabled": false,
+    "telemetry.telemetryLevel": "off",
+    "editor.wordWrap": "on",
+    "workbench.iconTheme": "material-icon-theme",
+    // vim related stuff
+    "vim.easymotion": true,
+    "vim.sneak": true,
+    "vim.incsearch": true,
+    "vim.useSystemClipboard": true,
+    "vim.useCtrlKeys": true,
+    "vim.hlsearch": true,
+    "vim.normalModeKeyBindingsNonRecursive": [
+        {
+        "before": ["<leader>", "d"],
+        "after": ["d", "d"]
+        }
+    ],
+    "vim.leader": "<space>",
+    "vim.handleKeys": {
+        "<C-a>": false,
+        "<C-f>": false,
+        "<C-w>": false,
+        "<C-n>": false
     },
-    {
-        "before": ["g", "_"],
-        "after": ["$"]
-    }
-],
+    // $ command takes newline
+    "vim.visualModeKeyBindingsNonRecursive": [
+        {
+            "before": ["$"],
+            "after": ["g", "_"]
+        },
+        {
+            "before": ["g", "_"],
+            "after": ["$"]
+        }
+    ],
+
+    "workbench.secondarySideBar.defaultVisibility": "hidden",
+    "chat.agent.enabled": false,
+    "workbench.startupEditor": "none",
+    "update.showReleaseNotes": false,
+    "editor.hover.enabled": "off",
+    "editor.minimap.enabled": false,
+    "window.restoreFullscreen": true,
+    "window.newWindowDimensions": "offset",
+
+    // Session/tab restore:
+    "window.restoreWindows": "all",
+    "files.hotExit": "onExitAndWindowClose",
+    "window.closeWhenEmpty": true,
+
+    // Make tabs “stick” (avoid Preview replacing/vanishing behavior):
+    "workbench.editor.enablePreview": false,
+    "workbench.editor.enablePreviewFromQuickOpen": false
 }
