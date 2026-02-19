@@ -18,9 +18,6 @@ find /var/log -type f -name "*.gz" -delete
 find /var/log -type f -name "*.1" -delete
 find /var/log -type f -regex ".*\.[0-9]+$" -delete
 
-# Special handling for journald (if applicable, though user script used simple file deletion)
-# journalctl --vacuum-time=3d 2>/dev/null
-
 # --- 2. Clean /tmp ---
 echo "Cleaning logs in /tmp..."
 # Delete log files in /tmp. Be careful not to delete active socket files or important temp data.
@@ -33,23 +30,17 @@ echo "Cleaning application logs in /home..."
 # Using -print0/xargs -0 for safety with spaces in filenames
 find /home -type f \( -name "*.log.gz" -o -name "*.log.[0-9]*" \) -print0 | xargs -0 -r rm -f
 
-# Specific user cache targets (from original script logic but safer)
-# Clean .bash_history, .python_history? 
-# The user asked to "clean application logs", but the original script also wiped history.
-# I will retain the history cleaning as requested by "Clean application logs" might imply meaningful cleanup 
-# based on the original script's intent, but I'll stick to logs primarily unless explicitly told to wipe history.
-# However, the user's prompt explicitly said "clean application logs", so I will focus on logs.
-# original script: >/home/*/.bash_history. I will include this as it was in the original.
 for user_dir in /home/*; do
   if [ -d "$user_dir" ]; then
     # Empty history files if they exist
     [ -f "$user_dir/.bash_history" ] && > "$user_dir/.bash_history"
     [ -f "$user_dir/.python_history" ] && > "$user_dir/.python_history"
-    
+
     # Clean Trash
     rm -rf "$user_dir/.local/share/Trash"/*
   fi
 done
+
 # Handle root history/trash too
 rm -rf /root/.local/share/Trash/*
 [ -f /root/.bash_history ] && > /root/.bash_history
@@ -58,37 +49,92 @@ rm -rf /root/.local/share/Trash/*
 echo "Cleaning apt cache..."
 apt-get clean
 apt-get autoclean
-apt-get autoremove -y
+apt-get autoremove --purge -y
 
-# --- 5. Remove Old Kernels ---
+# --- 5. Remove Old Kernels (purge by version set: image + headers + kbuild + modules) ---
 echo "Checking for old kernels..."
-current_kernel=$(uname -r)
+current_kernel="$(uname -r)"
 echo "Current kernel: $current_kernel"
 
-# List all installed kernel images excluding the current one
-kernels_to_remove=$(dpkg --list | grep 'linux-image-[0-9]' | awk '{print $2}' | sort -V | grep -v "$current_kernel")
+# Kernel version base: e.g. 6.12.75+deb13 from 6.12.75+deb13-amd64
+current_verbase="$(echo "$current_kernel" | sed -E 's/(.+)-(amd64|cloud|rt|unsigned).*$/\1/')"
 
-if [ -n "$kernels_to_remove" ]; then
-  echo "The following old kernels were found:"
-  echo "$kernels_to_remove"
-  
-  # Ask user if they want to remove old kernels
-  read -p "Do you want to remove these kernels? [y/N] " response
+# Collect all installed kernel-versioned packages we might want to purge
+mapfile -t all_kver_pkgs < <(
+  dpkg-query -W -f='${Package}\n' \
+    | grep -E '^(linux-image|linux-headers|linux-kbuild|linux-modules|linux-modules-extra)-[0-9]'
+)
+
+# Extract unique kernel version-bases present on the system (from package names)
+# We avoid regex on the version itself; we just slice "linux-*-<ver>-<flavour>" -> <ver>
+mapfile -t verbases < <(
+  printf '%s\n' "${all_kver_pkgs[@]}" \
+    | sed -E 's/^(linux-image|linux-headers|linux-modules|linux-modules-extra)-//; s/-(amd64|cloud|rt|unsigned).*//; s/-common$//' \
+    | sort -V | uniq
+)
+
+# Safety: keep running verbase + newest verbase
+newest_verbase="$(printf '%s\n' "${verbases[@]}" | tail -n 1)"
+
+echo "Running verbase: $current_verbase"
+echo "Newest  verbase: $newest_verbase"
+
+# Removable versions = everything except running + newest
+versions_to_remove="$(printf '%s\n' "${verbases[@]}" \
+  | grep -vF "$current_verbase" \
+  | grep -vF "$newest_verbase" \
+  || true)"
+
+if [ -z "$versions_to_remove" ]; then
+  echo "No old kernels found to remove (keeping running + newest)."
+else
+  echo "The following old kernel versions were found:"
+  echo "$versions_to_remove"
+
+  read -p "Do you want to remove these kernel versions? [y/N] " response
   if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-    for kernel in $kernels_to_remove; do
-      echo "Removing $kernel..."
-      apt-get remove --purge -y "$kernel"
-    done
-    
-    # Update grub only if kernels were removed
-    echo "Updating grub..."
-    update-grub
-    echo "Old kernels removed."
+
+    pkgs_to_purge=()
+
+    # Build purge list by FIXED matching on version string (no regex issues with '+')
+    while IFS= read -r ver; do
+      while IFS= read -r pkg; do
+        pkgs_to_purge+=("$pkg")
+      done < <(
+        printf '%s\n' "${all_kver_pkgs[@]}" \
+          | grep -F "$ver"
+      )
+    done <<< "$versions_to_remove"
+
+    # De-duplicate (safe if duplicates appear)
+    mapfile -t pkgs_to_purge < <(printf '%s\n' "${pkgs_to_purge[@]}" | sort -u)
+
+    if [ "${#pkgs_to_purge[@]}" -eq 0 ]; then
+      echo "Nothing matched for purge. Skipping."
+    else
+      echo "Purging packages (version sets):"
+      printf '  %s\n' "${pkgs_to_purge[@]}"
+
+      # Purge exact packages. Disabling recommends/suggests for the run (mostly irrelevant for purge, but harmless).
+      apt-get \
+        -o APT::Install-Recommends=false \
+        -o APT::Install-Suggests=false \
+        purge -y -- "${pkgs_to_purge[@]}"
+
+      # Remove leftover auto-installed deps
+      apt-get \
+        -o APT::Install-Recommends=false \
+        -o APT::Install-Suggests=false \
+        autoremove --purge -y
+
+      echo "Updating grub..."
+      update-grub
+      echo "Old kernels removed."
+    fi
   else
     echo "Kernel removal skipped."
   fi
-else
-  echo "No old kernels found to remove."
 fi
 
 echo "Cleanup finished."
+
